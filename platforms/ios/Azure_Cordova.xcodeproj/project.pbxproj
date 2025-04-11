@@ -11,6 +11,8 @@
 		1D3623260D0F684500981E51 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 1D3623250D0F684500981E51 /* AppDelegate.m */; };
 		1D60589B0D05DD56006BFB54 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 29B97316FDCFA39411CA2CEA /* main.m */; };
 		25869E972DA8E3860097A243 /* appsealing.lic in Resources */ = {isa = PBXBuildFile; fileRef = 25869E942DA8C61F0097A243 /* appsealing.lic */; };
+		25869E992DA8E6750097A243 /* libStaticAppSec.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 25869E982DA8E6750097A243 /* libStaticAppSec.a */; };
+		25869E9A2DA8E68F0097A243 /* AppsealingiOS.mm in Sources */ = {isa = PBXBuildFile; fileRef = 25869E962DA8C61F0097A243 /* AppsealingiOS.mm */; };
 		301BF552109A68D80062928A /* libCordova.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 301BF535109A57CC0062928A /* libCordova.a */; settings = {ATTRIBUTES = (Required, ); }; };
 		302D95F114D2391D003F00A1 /* MainViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 302D95EF14D2391D003F00A1 /* MainViewController.m */; };
 		302D95F214D2391D003F00A1 /* MainViewController.xib in Resources */ = {isa = PBXBuildFile; fileRef = 302D95F014D2391D003F00A1 /* MainViewController.xib */; };
@@ -64,9 +66,10 @@
 		1D3623240D0F684500981E51 /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		1D3623250D0F684500981E51 /* AppDelegate.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
 		1D6058910D05DD3D006BFB54 /* Azure_Cordova.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Azure_Cordova.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		25869E942DA8C61F0097A243 /* appsealing.lic */ = {isa = PBXFileReference; lastKnownFileType = file; name = appsealing.lic; path = AppSealingSDK/Libraries/appsealing.lic; sourceTree = "<group>"; };
-		25869E952DA8C61F0097A243 /* AppsealingiOS.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = AppsealingiOS.h; path = AppSealingSDK/Libraries/AppsealingiOS.h; sourceTree = "<group>"; };
-		25869E962DA8C61F0097A243 /* AppsealingiOS.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = AppsealingiOS.mm; path = AppSealingSDK/Libraries/AppsealingiOS.mm; sourceTree = "<group>"; };
+		25869E942DA8C61F0097A243 /* appsealing.lic */ = {isa = PBXFileReference; lastKnownFileType = file; name = appsealing.lic; path = ../AppSealingSDK/Libraries/appsealing.lic; sourceTree = "<group>"; };
+		25869E952DA8C61F0097A243 /* AppsealingiOS.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = AppsealingiOS.h; path = ../AppSealingSDK/Libraries/AppsealingiOS.h; sourceTree = "<group>"; };
+		25869E962DA8C61F0097A243 /* AppsealingiOS.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = AppsealingiOS.mm; path = ../AppSealingSDK/Libraries/AppsealingiOS.mm; sourceTree = "<group>"; };
+		25869E982DA8E6750097A243 /* libStaticAppSec.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libStaticAppSec.a; path = AppSealingSDK/Libraries/libStaticAppSec.a; sourceTree = "<group>"; };
 		29B97316FDCFA39411CA2CEA /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		301BF52D109A57CC0062928A /* CordovaLib.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = CordovaLib.xcodeproj; path = CordovaLib/CordovaLib.xcodeproj; sourceTree = "<group>"; };
 		301BF56E109A69640062928A /* www */ = {isa = PBXFileReference; lastKnownFileType = folder; path = www; sourceTree = SOURCE_ROOT; };
@@ -91,6 +94,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				25869E992DA8E6750097A243 /* libStaticAppSec.a in Frameworks */,
 				301BF552109A68D80062928A /* libCordova.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -109,9 +113,6 @@
 		29B97314FDCFA39411CA2CEA /* CustomTemplate */ = {
 			isa = PBXGroup;
 			children = (
-				25869E942DA8C61F0097A243 /* appsealing.lic */,
-				25869E952DA8C61F0097A243 /* AppsealingiOS.h */,
-				25869E962DA8C61F0097A243 /* AppsealingiOS.mm */,
 				EB87FDF41871DAF40020F90C /* config.xml */,
 				3047A50E1AB8057F00498E2A /* config */,
 				EB87FDF31871DA8E0020F90C /* www */,
@@ -141,6 +142,9 @@
 				1D3623240D0F684500981E51 /* AppDelegate.h */,
 				1D3623250D0F684500981E51 /* AppDelegate.m */,
 				29B97316FDCFA39411CA2CEA /* main.m */,
+				25869E942DA8C61F0097A243 /* appsealing.lic */,
+				25869E952DA8C61F0097A243 /* AppsealingiOS.h */,
+				25869E962DA8C61F0097A243 /* AppsealingiOS.mm */,
 			);
 			path = Azure_Cordova;
 			sourceTree = "<group>";
@@ -156,6 +160,7 @@
 		29B97323FDCFA39411CA2CEA /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				25869E982DA8E6750097A243 /* libStaticAppSec.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -286,6 +291,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				25869E9A2DA8E68F0097A243 /* AppsealingiOS.mm in Sources */,
 				1D60589B0D05DD56006BFB54 /* main.m in Sources */,
 				1D3623260D0F684500981E51 /* AppDelegate.m in Sources */,
 				302D95F114D2391D003F00A1 /* MainViewController.m in Sources */,
@@ -325,6 +331,10 @@
 				INFOPLIST_FILE = "Azure_Cordova/Azure_Cordova-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/AppSealingSDK/Libraries",
+				);
 				MARKETING_VERSION = 10.18;
 				PRODUCT_BUNDLE_IDENTIFIER = com.inka.swift;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -348,12 +358,10 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_ENTITLEMENTS = "$(PROJECT_DIR)/$(PROJECT_NAME)/Entitlements-$(CONFIGURATION).plist";
 				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = YES;
 				CURRENT_PROJECT_VERSION = 7;
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 22X77ENQ2H;
+				DEVELOPMENT_TEAM = 22X77ENQ2H;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "Azure_Cordova/Azure_Cordova-Prefix.pch";
 				GCC_THUMB_SUPPORT = NO;
@@ -361,11 +369,14 @@
 				INFOPLIST_FILE = "Azure_Cordova/Azure_Cordova-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/AppSealingSDK/Libraries",
+				);
 				MARKETING_VERSION = 10.18;
 				PRODUCT_BUNDLE_IDENTIFIER = com.inka.swift;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "AppSealing Wildcard Distribution Profile";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
