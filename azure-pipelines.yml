@@ -108,7 +108,9 @@ steps:
             </dict>
         </dict>
       </plist>
-      EOF      
+      EOF
+
+      cat "$EXPORT_DIR/ExportOptions.plist"
     displayName: 'Generate ExportOptions.plist'
 
   - script: |
@@ -123,7 +125,7 @@ steps:
 
   - script: |
       # Grant execution permission to generate_hash script
-      HASH_SCRIPT_PATH="$(Build.SourcesDirectory)/ios/AppSealingSDK/generate_hash"
+      HASH_SCRIPT_PATH="$(Build.SourcesDirectory)/platforms/ios/AppSealingSDK/generate_hash"
       IPA_PATH=$(find "$(Build.ArtifactStagingDirectory)" -type f -name "*.ipa" | head -n 1)
 
       echo "Granting execution permission to generate_hash..."
@@ -132,7 +134,7 @@ steps:
       echo "Running generate_hash with IPA... $IPA_PATH"
       "$HASH_SCRIPT_PATH" "$IPA_PATH"
     displayName: 'Run generate_hash on IPA'
-    
+
   - script: |
       IPA_PATH=$(find "$(Build.ArtifactStagingDirectory)" -type f -name "*.ipa" | head -n 1)
 
