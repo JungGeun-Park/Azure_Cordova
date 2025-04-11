@@ -82,7 +82,7 @@ steps:
 
       echo "##vso[task.setvariable variable=BUNDLE_ID]$BUNDLE_ID"
     displayName: 'Extract Bundle ID from Cordova Config'
-    
+
   - script: |
       cd platforms/ios
       EXPORT_DIR="$(Build.ArtifactStagingDirectory)"
@@ -139,7 +139,7 @@ steps:
 
   - script: |
       # Grant execution permission to generate_hash script
-      HASH_SCRIPT_PATH="$(Build.SourcesDirectory)/platforms/ios/AppSealingSDK/generate_hash"
+      HASH_SCRIPT_PATH="$(Build.SourcesDirectory)/platforms/ios/AppSealingSDK/Tools/generate_hash"
       IPA_PATH=$(find "$(Build.ArtifactStagingDirectory)" -type f -name "*.ipa" | head -n 1)
 
       echo "Granting execution permission to generate_hash..."
