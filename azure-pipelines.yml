@@ -46,6 +46,24 @@ steps:
       security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
     displayName: 'Setup Temporary Keychain and Install Certificate'
 
+  - task: UseNode@1
+    inputs:
+      version: '18.x'
+    displayName: 'Install Node.js'
+
+  - script: |
+      echo "Installing JS dependencies..."
+      yarn install --frozen-lockfile
+    displayName: 'Install Node Modules'
+
+  - script: |
+      echo "Installing dependencies..."
+      brew install cocoapods
+      gem pristine ffi --version 1.16.3
+      cd platforms/ios
+      pod install
+    displayName: 'Install CocoaPods'
+
   - script: |
       # Automatically detect the app name from the platforms/ios directory
       IOS_PATH="platforms/ios"
