@@ -70,6 +70,20 @@ steps:
     displayName: 'Detect App Name'
 
   - script: |
+      # Extract BUNDLE_ID from Cordova config.xml
+      CONFIG_XML_PATH="config.xml"
+      if [ -f "$CONFIG_XML_PATH" ]; then
+          BUNDLE_ID=$(grep -oE 'id="[^"]+"' "$CONFIG_XML_PATH" | cut -d'"' -f2)
+          echo "Extracted BUNDLE_ID from config.xml: $BUNDLE_ID"
+      else
+          echo "##vso[task.logissue type=error] config.xml not found!"
+          exit 1
+      fi
+
+      echo "##vso[task.setvariable variable=BUNDLE_ID]$BUNDLE_ID"
+    displayName: 'Extract Bundle ID from Cordova Config'
+    
+  - script: |
       cd platforms/ios
       EXPORT_DIR="$(Build.ArtifactStagingDirectory)"
       ARCHIVE_PATH="$EXPORT_DIR/${APP_NAME}.xcarchive"
