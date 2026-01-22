@@ -73,37 +73,12 @@ steps:
     echo "##vso[task.setvariable variable=BUNDLE_ID]$BUNDLE_ID"
   displayName: 'Extract Bundle ID from Cordova Config'
 
-# 4) Install provisioning profile and extract UUID
-- script: |
-    set -euxo pipefail
-
-    PROVISIONING_PROFILE_PATH="$(Build.SourcesDirectory)/platforms/ios/profile.mobileprovision"
-    PP_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-    mkdir -p "$PP_DIR"
-
-    echo ">>> Dumping provisioning profile to plist..."
-    TMP_PLIST="$(mktemp)"
-    security cms -D -i "$PROVISIONING_PROFILE_PATH" > "$TMP_PLIST"
-
-    PP_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$TMP_PLIST")
-    PP_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$TMP_PLIST" || echo "UNKNOWN_NAME")
-    TEAM_ID=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$TMP_PLIST" || echo "UNKNOWN_TEAM")
-    APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$TMP_PLIST" || echo "UNKNOWN_APP_ID")
-
-    echo ">>> PROFILE INFO"
-    echo "UUID         : $PP_UUID"
-    echo "Name         : $PP_NAME"
-    echo "Team ID      : $TEAM_ID"
-    echo "App ID       : $APP_ID"
-    echo "Target path  : $PP_DIR/$PP_UUID.mobileprovision"
-
-    cp "$PROVISIONING_PROFILE_PATH" "$PP_DIR/$PP_UUID.mobileprovision"
-
-    echo ">>> Files in $PP_DIR"
-    ls -al "$PP_DIR"
-
-    echo "##vso[task.setvariable variable=PROFILE_UUID]$PP_UUID"
-  displayName: 'Install Provisioning Profile'
+# (기존 4번 스텝 제거하고) 아래 추가
+- task: InstallAppleProvisioningProfile@1
+  displayName: 'Install Apple Provisioning Profile'
+  inputs:
+    provProfileSecureFile: 'profile.mobileprovision'   # Secure Files에 업로드한 이름
+    removeProfile: false
 
 # 5) Generate ExportOptions.plist (XML)
 - script: |
@@ -141,15 +116,6 @@ steps:
     EXPORT_DIR="$(Build.ArtifactStagingDirectory)"
     ARCHIVE_PATH="$EXPORT_DIR/${APP_NAME}.xcarchive"
 
-    echo ">>> ARCHIVE SETTINGS"
-    echo "APP_NAME                   : $APP_NAME"
-    echo "TEAM_ID                    : $(TEAM_ID)"
-    echo "BUNDLE_ID                  : $(BUNDLE_ID)"
-    echo "PROVISIONING_PROFILE_NAME  : $(PROVISIONING_PROFILE_NAME)"
-    echo "PROFILE_UUID               : $(PROFILE_UUID)"
-    echo "Provisioning dir listing:"
-    ls -al "$HOME/Library/MobileDevice/Provisioning Profiles" || true
-
     cd platforms/ios
 
     xcodebuild clean archive \
@@ -160,7 +126,7 @@ steps:
       CODE_SIGN_IDENTITY="Apple Distribution" \
       CODE_SIGN_STYLE="Manual" \
       DEVELOPMENT_TEAM="$(TEAM_ID)" \
-      PROVISIONING_PROFILE_SPECIFIER="$(PROFILE_UUID)" \
+      PROVISIONING_PROFILE_SPECIFIER="$(PROVISIONING_PROFILE_NAME)" \
       SWIFT_OBJC_BRIDGING_HEADER="Azure_RN078-Bridging-Header.h" \
       -archivePath "$ARCHIVE_PATH"
   displayName: 'Archive iOS App'
