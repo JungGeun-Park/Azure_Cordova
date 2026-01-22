@@ -137,7 +137,7 @@ steps:
       CODE_SIGN_IDENTITY="Apple Distribution" \
       CODE_SIGN_STYLE="Manual" \
       DEVELOPMENT_TEAM="$(TEAM_ID)" \
-      PROVISIONING_PROFILE_SPECIFIER="$(PROFILE_UUID)" \
+      PROVISIONING_PROFILE_SPECIFIER="$(PROVISIONING_PROFILE_NAME)" \
       SWIFT_OBJC_BRIDGING_HEADER="Azure_RN078-Bridging-Header.h" \
       -archivePath "$ARCHIVE_PATH"
   displayName: 'Archive iOS App'
