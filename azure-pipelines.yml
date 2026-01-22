@@ -1,82 +1,134 @@
+#=============================================================================================================================================================
+#
+#
+# Azure Script code for Cordova project
+#
+#
+#=============================================================================================================================================================
 trigger:
-- main
+- develop
 
 pool:
   name: APPSEALING
 
 steps:
+# 1) Setup temporary keychain and import certificate
 - script: |
-    # Define paths for provisioning profile and keychain setup
+    set -e
     P12_CERT_PATH="$(Build.SourcesDirectory)/platforms/ios/distribution.p12"
     PROVISIONING_PROFILE_PATH="$(Build.SourcesDirectory)/platforms/ios/profile.mobileprovision"
     KEYCHAIN_PATH="$HOME/Library/Keychains/temp-keychain.keychain-db"
     KEYCHAIN_PASSWORD="temp123"
 
-    # Create a temporary keychain for code signing
-    if security list-keychains | grep -q "temp-keychain.keychain-db"; then
-        echo "Deleting existing temporary keychain..."
-        security delete-keychain "$KEYCHAIN_PATH"
-    fi
-
-    echo "Creating temporary keychain..."
+    # Always recreate temporary keychain
+    security delete-keychain "$KEYCHAIN_PATH" || true
     security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-    echo "Setting temporary keychain as default..."
-    security list-keychains -d user -s "$KEYCHAIN_PATH"
+    security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed s/\"//g)
     security default-keychain -s "$KEYCHAIN_PATH"
     security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
     security set-keychain-settings -lut 3600 "$KEYCHAIN_PATH"
 
-    echo "Importing distribution certificate (PKCS#12) into temporary keychain..."
+    # Import p12 certificate
     security import "$P12_CERT_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-  displayName: 'Setup Temporary Keychain and Install Certificate'
+    security find-identity -v "$KEYCHAIN_PATH"
+  displayName: 'Setup Keychain and Install Certificate'
   env:
     CERTIFICATE_PASSWORD: $(CERTIFICATE_PASSWORD)
 
-- task: UseNode@1
-  inputs:
-    version: '18.x'
-  displayName: 'Install Node.js'
-
+# 2) Detect app name from platforms/ios
 - script: |
-    # Automatically detect the app name from the platforms/ios directory
     IOS_PATH="platforms/ios"
     if [ -d "$IOS_PATH" ]; then
-        APP_NAME=$(ls "$IOS_PATH" | grep ".xcodeproj" | sed 's/.xcodeproj//')
-        if [ -z "$APP_NAME" ]; then
-            echo "No Xcode project found in the platforms/ios directory."
-            exit 1
-        fi
-    else
-        echo "platforms/ios directory not found."
+      APP_NAME=$(ls "$IOS_PATH" | grep ".xcodeproj" | sed 's/.xcodeproj//')
+      if [ -z "$APP_NAME" ]; then
+        echo "No Xcode project found in platforms/ios directory."
         exit 1
+      fi
+    else
+      echo "platforms/ios directory not found."
+      exit 1
     fi
 
     echo "Detected app name: $APP_NAME"
     echo "##vso[task.setvariable variable=APP_NAME]$APP_NAME"
   displayName: 'Detect App Name'
 
+# 3) Extract BUNDLE_ID from Cordova config.xml
 - script: |
-    # Extract BUNDLE_ID from Cordova config.xml
     CONFIG_XML_PATH="config.xml"
     if [ -f "$CONFIG_XML_PATH" ]; then
-        BUNDLE_ID=$(grep -oE 'id="[^"]+"' "$CONFIG_XML_PATH" | cut -d'"' -f2)
-        echo "Extracted BUNDLE_ID from config.xml: $BUNDLE_ID"
+      BUNDLE_ID=$(grep -oE 'id="[^"]+"' "$CONFIG_XML_PATH" | cut -d'"' -f2)
+      echo "Extracted BUNDLE_ID from config.xml: $BUNDLE_ID"
     else
-        echo "##vso[task.logissue type=error] config.xml not found!"
-        exit 1
+      echo "##vso[task.logissue type=error] config.xml not found!"
+      exit 1
+    fi
+
+    if [ -z "$BUNDLE_ID" ]; then
+      echo "##vso[task.logissue type=error] Bundle ID is empty!"
+      exit 1
     fi
 
     echo "##vso[task.setvariable variable=BUNDLE_ID]$BUNDLE_ID"
   displayName: 'Extract Bundle ID from Cordova Config'
 
+# 4) Install provisioning profile and extract UUID
 - script: |
-    cd platforms/ios
+    set -euxo pipefail
+
+    PROVISIONING_PROFILE_PATH="$(Build.SourcesDirectory)/platforms/ios/profile.mobileprovision"
+    PP_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+    mkdir -p "$PP_DIR"
+
+    TMP_PLIST="$(mktemp)"
+    security cms -D -i "$PROVISIONING_PROFILE_PATH" > "$TMP_PLIST"
+    PP_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$TMP_PLIST")
+
+    echo "Provisioning Profile UUID: $PP_UUID"
+    cp "$PROVISIONING_PROFILE_PATH" "$PP_DIR/$PP_UUID.mobileprovision"
+
+    echo "##vso[task.setvariable variable=PROFILE_UUID]$PP_UUID"
+  displayName: 'Install Provisioning Profile'
+
+# 5) Generate ExportOptions.plist (XML)
+- script: |
+    EXPORT_DIR="$(Build.ArtifactStagingDirectory)"
+    mkdir -p "$EXPORT_DIR"
+
+    cat << EOF > "$EXPORT_DIR/ExportOptions.plist"
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+        <key>method</key>
+        <string>app-store-connect</string>
+        <key>signingStyle</key>
+        <string>manual</string>
+        <key>teamID</key>
+        <string>$(TEAM_ID)</string>
+        <key>provisioningProfiles</key>
+        <dict>
+            <key>$(BUNDLE_ID)</key>
+            <string>$(PROVISIONING_PROFILE_NAME)</string>
+        </dict>
+    </dict>
+    </plist>
+    EOF
+
+    echo "ExportOptions.plist created at $EXPORT_DIR/ExportOptions.plist"
+  displayName: 'Generate ExportOptions.plist'
+  env:
+    TEAM_ID: $(TEAM_ID)
+    PROVISIONING_PROFILE_NAME: $(PROVISIONING_PROFILE_NAME)
+
+# 6) Archive iOS app
+- script: |
     EXPORT_DIR="$(Build.ArtifactStagingDirectory)"
     ARCHIVE_PATH="$EXPORT_DIR/${APP_NAME}.xcarchive"
 
-    echo "Exporting .ipa..."
+    cd platforms/ios
+
     xcodebuild clean archive \
       -workspace "${APP_NAME}.xcworkspace" \
       -scheme "${APP_NAME}" \
@@ -93,80 +145,51 @@ steps:
     TEAM_ID: $(TEAM_ID)
     PROVISIONING_PROFILE_NAME: $(PROVISIONING_PROFILE_NAME)
 
+# 7) Export IPA
 - script: |
     EXPORT_DIR="$(Build.ArtifactStagingDirectory)"
-    
-    cat << EOF > "$EXPORT_DIR/ExportOptions.plist"
-    <?xml version="1.0" encoding="UTF-8"?>
-    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-    <plist version="1.0">
-      <dict>
-          <key>method</key>
-          <string>app-store</string>
-          <key>teamID</key>
-          <string>$(TEAM_ID)</string>
-          <key>provisioningProfiles</key>
-          <dict>
-              <key>$BUNDLE_ID</key>
-              <string>$(PROVISIONING_PROFILE_NAME)</string>
-          </dict>
-      </dict>
-    </plist>
-    EOF
-  displayName: 'Generate ExportOptions.plist'
-  env:
-    TEAM_ID: $(TEAM_ID)
-    PROVISIONING_PROFILE_NAME: $(PROVISIONING_PROFILE_NAME)
+    ARCHIVE_PATH="$EXPORT_DIR/${APP_NAME}.xcarchive"
 
-- script: |
-    EXPORT_DIR="$(Build.ArtifactStagingDirectory)"
-    
     xcodebuild -exportArchive \
-      -archivePath "$(Build.ArtifactStagingDirectory)/${APP_NAME}.xcarchive" \
+      -archivePath "$ARCHIVE_PATH" \
       -exportOptionsPlist "$EXPORT_DIR/ExportOptions.plist" \
       -exportPath "$EXPORT_DIR"
-
   displayName: 'Export IPA'
 
+# 8) Run generate_hash on IPA
 - script: |
-    # Grant execution permission to generate_hash script
     HASH_SCRIPT_PATH="$(Build.SourcesDirectory)/platforms/ios/AppSealingSDK/Tools/generate_hash"
     IPA_PATH=$(find "$(Build.ArtifactStagingDirectory)" -type f -name "*.ipa" | head -n 1)
 
-    echo "Granting execution permission to generate_hash..."
     chmod +x "$HASH_SCRIPT_PATH"
-
-    echo "Running generate_hash with IPA... $IPA_PATH"
     "$HASH_SCRIPT_PATH" "$IPA_PATH"
   displayName: 'Run generate_hash on IPA'
 
+# 9) Upload to TestFlight
 - script: |
     IPA_PATH=$(find "$(Build.ArtifactStagingDirectory)" -type f -name "*.ipa" | head -n 1)
-
     if [ ! -f "$IPA_PATH" ]; then
-        echo "IPA file not found. Skipping upload."
-        exit 1
+      echo "IPA file not found. Skipping upload."
+      exit 1
     fi
 
     xcrun altool --upload-app \
-      --file "$IPA_PATH" \
-      --type ios \
-      --username "$(APPLE_ID)" \
-      --password "$(APP_SPECIFIC_PASSWORD)"
-    
+      -f "$IPA_PATH" \
+      -t ios \
+      -u "$(APPLE_ID)" \
+      -p "$(APP_SPECIFIC_PASSWORD)"
   displayName: 'Upload to TestFlight'
   env:
     APPLE_ID: $(APPLE_ID)
     APP_SPECIFIC_PASSWORD: $(APP_SPECIFIC_PASSWORD)
 
+# 10) Cleanup temporary keychain
 - script: |
     TEMP_KEYCHAIN_PATH="$HOME/Library/Keychains/temp-keychain.keychain-db"
-
     if [ -f "$TEMP_KEYCHAIN_PATH" ]; then
-        security delete-keychain "$TEMP_KEYCHAIN_PATH"
-        echo "Temporary keychain deleted successfully."
+      security delete-keychain "$TEMP_KEYCHAIN_PATH"
+      echo "Temporary keychain deleted successfully."
     else
-        echo "Temporary keychain not found. Skipping deletion."
+      echo "Temporary keychain not found. Skipping deletion."
     fi
-
   displayName: 'Cleanup Temporary Files'
