@@ -73,12 +73,23 @@ steps:
     echo "##vso[task.setvariable variable=BUNDLE_ID]$BUNDLE_ID"
   displayName: 'Extract Bundle ID from Cordova Config'
 
-# (기존 4번 스텝 제거하고) 아래 추가
-- task: InstallAppleProvisioningProfile@1
-  displayName: 'Install Apple Provisioning Profile'
-  inputs:
-    provProfileSecureFile: 'profile.mobileprovision'   # Secure Files에 업로드한 이름
-    removeProfile: false
+# 4) Install provisioning profile and extract UUID
+- script: |
+    set -euxo pipefail
+
+    PROVISIONING_PROFILE_PATH="$(Build.SourcesDirectory)/platforms/ios/profile.mobileprovision"
+    PP_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+    mkdir -p "$PP_DIR"
+
+    TMP_PLIST="$(mktemp)"
+    security cms -D -i "$PROVISIONING_PROFILE_PATH" > "$TMP_PLIST"
+    PP_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$TMP_PLIST")
+
+    echo "Provisioning Profile UUID: $PP_UUID"
+    cp "$PROVISIONING_PROFILE_PATH" "$PP_DIR/$PP_UUID.mobileprovision"
+
+    echo "##vso[task.setvariable variable=PROFILE_UUID]$PP_UUID"
+  displayName: 'Install Provisioning Profile'
 
 # 5) Generate ExportOptions.plist (XML)
 - script: |
