@@ -1,10 +1,7 @@
-#=============================================================================================================================================================
-#
-#
-# Azure Script code for Cordova project
-#
-#
-#=============================================================================================================================================================
+#======================================================================================================================
+# Azure Script code for Cordova iOS project
+#======================================================================================================================
+
 trigger:
 - develop
 
@@ -85,15 +82,7 @@ steps:
     echo "##vso[task.setvariable variable=BUNDLE_ID]$BUNDLE_ID"
   displayName: 'Extract Bundle ID from Cordova Config'
 
-# 5) Install provisioning profile via Azure Secure Files (optional but recommended)
-#    If you want to keep the manual install instead, you can skip this task and rely on step 6 below.
-- task: InstallAppleProvisioningProfile@1
-  displayName: 'Install Apple Provisioning Profile'
-  inputs:
-    provProfileSecureFile: 'AppSealing_Wildcard_Distribution.mobileprovision'  # Secure Files name
-    removeProfile: false
-
-# 6) (Optional) Manual install + detailed logging (kept as a fallback / debugging aid)
+# 5) Install provisioning profile (manual, from platforms/ios/profile.mobileprovision)
 - script: |
     set -euxo pipefail
 
@@ -117,15 +106,15 @@ steps:
     echo "App ID       : $APP_ID"
     echo "Target path  : $PP_DIR/$PP_UUID.mobileprovision"
 
-    cp "$PROVISIONING_PROFILE_PATH" "$PP_DIR/$PP_UUID.mobileprovision" || true
+    cp "$PROVISIONING_PROFILE_PATH" "$PP_DIR/$PP_UUID.mobileprovision"
 
     echo ">>> Files in $PP_DIR"
     ls -al "$PP_DIR"
 
     echo "##vso[task.setvariable variable=PROFILE_UUID]$PP_UUID"
-  displayName: 'Install Provisioning Profile (Manual Fallback)'
-
-# 7) Generate ExportOptions.plist (used only at export stage for provisioningProfiles mapping)
+  displayName: 'Install Provisioning Profile'
+  
+# 6) Generate ExportOptions.plist (used only at export stage)
 - script: |
     set -e
     EXPORT_DIR="$(Build.ArtifactStagingDirectory)"
@@ -158,7 +147,7 @@ steps:
     TEAM_ID: $(TEAM_ID)
     PROVISIONING_PROFILE_NAME: $(PROVISIONING_PROFILE_NAME)
 
-# 8) Archive iOS app (Automatic signing, robust target/scheme detection with App fallback)
+# 7) Archive iOS app (Automatic signing, App fallback)
 - script: |
     set -euxo pipefail
 
@@ -177,11 +166,10 @@ steps:
     echo "Provisioning dir listing:"
     ls -al "$HOME/Library/MobileDevice/Provisioning Profiles" || true
 
-    # 1) Try workspace/scheme == APP_NAME (.xcworkspace)
+    # Resolve workspace / project / scheme
     SCHEME_CANDIDATE="$APP_NAME"
     WORKSPACE_CANDIDATE="$APP_NAME.xcworkspace"
     PROJECT_CANDIDATE="$APP_NAME.xcodeproj"
-
     USE_WORKSPACE=false
 
     if [ -f "$WORKSPACE_CANDIDATE" ]; then
@@ -189,15 +177,12 @@ steps:
     elif [ -f "$PROJECT_CANDIDATE" ]; then
       USE_WORKSPACE=false
     else
-      # 2) Try to detect workspace and scheme automatically
       WS=$(ls *.xcworkspace 2>/dev/null | head -n 1 || true)
       if [ -n "$WS" ]; then
         WORKSPACE_CANDIDATE="$WS"
         USE_WORKSPACE=true
-        # Derive scheme name from workspace name without extension
         SCHEME_CANDIDATE="${WS%.xcworkspace}"
       else
-        # 3) Fallback: force App.xcworkspace / App scheme
         WORKSPACE_CANDIDATE="App.xcworkspace"
         SCHEME_CANDIDATE="App"
         USE_WORKSPACE=true
@@ -210,7 +195,7 @@ steps:
     echo "PROJECT_CANDIDATE  : $PROJECT_CANDIDATE"
     echo "SCHEME_CANDIDATE   : $SCHEME_CANDIDATE"
 
-    # Ensure deployment target >= 12.0 (Cordova templates often use 11.0)
+    # Bump deployment target to 12.0 if Info.plist exists
     INFO_PLIST_PATH="$IOS_DIR/$APP_NAME/$APP_NAME-Info.plist"
     if [ -f "$INFO_PLIST_PATH" ]; then
       echo ">>> Bumping IPHONEOS_DEPLOYMENT_TARGET to 12.0 in $INFO_PLIST_PATH (if exists)"
@@ -244,7 +229,7 @@ steps:
     TEAM_ID: $(TEAM_ID)
     PROVISIONING_PROFILE_NAME: $(PROVISIONING_PROFILE_NAME)
 
-# 9) Export IPA using ExportOptions.plist
+# 8) Export IPA using ExportOptions.plist
 - script: |
     set -e
     EXPORT_DIR="$(Build.ArtifactStagingDirectory)"
@@ -260,7 +245,7 @@ steps:
     ls -al "$EXPORT_DIR"
   displayName: 'Export IPA'
 
-# 10) Run generate_hash on IPA
+# 9) Run generate_hash on IPA
 - script: |
     set -e
     HASH_SCRIPT_PATH="$(Build.SourcesDirectory)/platforms/ios/AppSealingSDK/Tools/generate_hash"
@@ -272,7 +257,7 @@ steps:
     "$HASH_SCRIPT_PATH" "$IPA_PATH"
   displayName: 'Run generate_hash on IPA'
 
-# 11) Upload IPA to TestFlight
+# 10) Upload IPA to TestFlight
 - script: |
     set -e
     IPA_PATH=$(find "$(Build.ArtifactStagingDirectory)" -type f -name "*.ipa" | head -n 1)
@@ -292,7 +277,7 @@ steps:
     APPLE_ID: $(APPLE_ID)
     APP_SPECIFIC_PASSWORD: $(APP_SPECIFIC_PASSWORD)
 
-# 12) Cleanup temporary keychain
+# 11) Cleanup temporary keychain
 - script: |
     TEMP_KEYCHAIN_PATH="$HOME/Library/Keychains/temp-keychain.keychain-db"
     if [ -f "$TEMP_KEYCHAIN_PATH" ]; then
