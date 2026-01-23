@@ -48,7 +48,7 @@ steps:
     fi
 
     # Prefer App.xcworkspace / App.xcodeproj if exists
-    if [ -f "$IOS_PATH/App.xcworkspace" ] || [ -f "$IOS_PATH/App.xcodeproj" ]; then
+    if [ -d "$IOS_PATH/App.xcworkspace" ] || [ -d "$IOS_PATH/App.xcodeproj" ]; then
       APP_NAME="App"
     else
       APP_NAME=$(ls "$IOS_PATH" | grep ".xcodeproj" | sed 's/.xcodeproj//' | head -n 1 || true)
@@ -113,7 +113,7 @@ steps:
 
     echo "##vso[task.setvariable variable=PROFILE_UUID]$PP_UUID"
   displayName: 'Install Provisioning Profile'
-  
+
 # 6) Generate ExportOptions.plist (used only at export stage)
 - script: |
     set -e
@@ -147,7 +147,7 @@ steps:
     TEAM_ID: $(TEAM_ID)
     PROVISIONING_PROFILE_NAME: $(PROVISIONING_PROFILE_NAME)
 
-# 7) Archive iOS app (Automatic signing, App fallback)
+# 7) Archive iOS app (Automatic signing, robust workspace/scheme detection + App fallback)
 - script: |
     set -euxo pipefail
 
@@ -166,26 +166,40 @@ steps:
     echo "Provisioning dir listing:"
     ls -al "$HOME/Library/MobileDevice/Provisioning Profiles" || true
 
-    # Resolve workspace / project / scheme
+    # Resolve workspace / project / scheme safely (directory-based, never contents.xcworkspacedata)
     SCHEME_CANDIDATE="$APP_NAME"
-    WORKSPACE_CANDIDATE="$APP_NAME.xcworkspace"
+    WORKSPACE_CANDIDATE=""
     PROJECT_CANDIDATE="$APP_NAME.xcodeproj"
     USE_WORKSPACE=false
 
-    if [ -f "$WORKSPACE_CANDIDATE" ]; then
+    # 1) Prefer App.xcworkspace directory if exists
+    if [ -d "App.xcworkspace" ]; then
+      WORKSPACE_CANDIDATE="App.xcworkspace"
+      SCHEME_CANDIDATE="App"
       USE_WORKSPACE=true
-    elif [ -f "$PROJECT_CANDIDATE" ]; then
-      USE_WORKSPACE=false
     else
-      WS=$(ls *.xcworkspace 2>/dev/null | head -n 1 || true)
+      # 2) Any *.xcworkspace directory in current dir
+      WS=$(find . -maxdepth 1 -type d -name "*.xcworkspace" | sed 's|^./||' | head -n 1 || true)
       if [ -n "$WS" ]; then
         WORKSPACE_CANDIDATE="$WS"
-        USE_WORKSPACE=true
+        # Scheme candidate = workspace name without extension
         SCHEME_CANDIDATE="${WS%.xcworkspace}"
-      else
-        WORKSPACE_CANDIDATE="App.xcworkspace"
-        SCHEME_CANDIDATE="App"
         USE_WORKSPACE=true
+      fi
+    fi
+
+    # 3) If no workspace found, fall back to project
+    if [ "$USE_WORKSPACE" = false ]; then
+      if [ ! -d "$PROJECT_CANDIDATE" ]; then
+        # Last resort: try first .xcodeproj in directory
+        P=$(find . -maxdepth 1 -type d -name "*.xcodeproj" | sed 's|^./||' | head -n 1 || true)
+        if [ -n "$P" ]; then
+          PROJECT_CANDIDATE="$P"
+          SCHEME_CANDIDATE="${P%.xcodeproj}"
+        else
+          echo "No .xcworkspace or .xcodeproj found to archive."
+          exit 1
+        fi
       fi
     fi
 
@@ -195,7 +209,7 @@ steps:
     echo "PROJECT_CANDIDATE  : $PROJECT_CANDIDATE"
     echo "SCHEME_CANDIDATE   : $SCHEME_CANDIDATE"
 
-    # Bump deployment target to 12.0 if Info.plist exists
+    # Bump deployment target to 12.0 if Info.plist exists (best-effort)
     INFO_PLIST_PATH="$IOS_DIR/$APP_NAME/$APP_NAME-Info.plist"
     if [ -f "$INFO_PLIST_PATH" ]; then
       echo ">>> Bumping IPHONEOS_DEPLOYMENT_TARGET to 12.0 in $INFO_PLIST_PATH (if exists)"
