@@ -147,7 +147,7 @@ steps:
     TEAM_ID: $(TEAM_ID)
     PROVISIONING_PROFILE_NAME: $(PROVISIONING_PROFILE_NAME)
 
-# 7) Archive iOS app (Automatic signing, robust workspace/scheme detection + App fallback)
+# 7) Archive iOS app (Manual signing, robust workspace/scheme detection + App fallback)
 - script: |
     set -euxo pipefail
 
@@ -216,14 +216,14 @@ steps:
       /usr/libexec/PlistBuddy -c "Set :IPHONEOS_DEPLOYMENT_TARGET 12.0" "$INFO_PLIST_PATH" || true
     fi
 
-    echo ">>> Starting Xcode archive with Automatic signing..."
+    echo ">>> Starting Xcode archive with Manual signing..."
     if [ "$USE_WORKSPACE" = true ]; then
       xcodebuild clean archive \
         -workspace "$WORKSPACE_CANDIDATE" \
         -scheme "$SCHEME_CANDIDATE" \
         -sdk iphoneos \
         -configuration Release \
-        CODE_SIGN_STYLE=Automatic \
+        CODE_SIGN_STYLE=Manual \
         DEVELOPMENT_TEAM="$(TEAM_ID)" \
         -archivePath "$ARCHIVE_PATH"
     else
@@ -232,7 +232,7 @@ steps:
         -scheme "$SCHEME_CANDIDATE" \
         -sdk iphoneos \
         -configuration Release \
-        CODE_SIGN_STYLE=Automatic \
+        CODE_SIGN_STYLE=Manual \
         DEVELOPMENT_TEAM="$(TEAM_ID)" \
         -archivePath "$ARCHIVE_PATH"
     fi
