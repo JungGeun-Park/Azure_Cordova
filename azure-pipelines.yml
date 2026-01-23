@@ -16,11 +16,10 @@ steps:
 - script: |
     set -e
     P12_CERT_PATH="$(Build.SourcesDirectory)/platforms/ios/distribution.p12"
-    PROVISIONING_PROFILE_PATH="$(Build.SourcesDirectory)/platforms/ios/profile.mobileprovision"
     KEYCHAIN_PATH="$HOME/Library/Keychains/temp-keychain.keychain-db"
     KEYCHAIN_PASSWORD="temp123"
 
-    # Always recreate temporary keychain
+    echo ">>> Recreate temporary keychain"
     security delete-keychain "$KEYCHAIN_PATH" || true
     security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
     security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed s/\"//g)
@@ -28,7 +27,7 @@ steps:
     security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
     security set-keychain-settings -lut 3600 "$KEYCHAIN_PATH"
 
-    # Import p12 certificate
+    echo ">>> Import distribution certificate"
     security import "$P12_CERT_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
     security find-identity -v "$KEYCHAIN_PATH"
@@ -36,26 +35,39 @@ steps:
   env:
     CERTIFICATE_PASSWORD: $(CERTIFICATE_PASSWORD)
 
-# 2) Detect app name from platforms/ios
+# 2) Install Node.js
+- task: UseNode@1
+  inputs:
+    version: '18.x'
+  displayName: 'Install Node.js'
+
+# 3) Detect app name from platforms/ios (project basename)
 - script: |
+    set -e
     IOS_PATH="platforms/ios"
-    if [ -d "$IOS_PATH" ]; then
-      APP_NAME=$(ls "$IOS_PATH" | grep ".xcodeproj" | sed 's/.xcodeproj//')
-      if [ -z "$APP_NAME" ]; then
-        echo "No Xcode project found in platforms/ios directory."
-        exit 1
-      fi
-    else
+    if [ ! -d "$IOS_PATH" ]; then
       echo "platforms/ios directory not found."
       exit 1
     fi
 
-    echo "Detected app name: $APP_NAME"
+    # Prefer App.xcworkspace / App.xcodeproj if exists
+    if [ -f "$IOS_PATH/App.xcworkspace" ] || [ -f "$IOS_PATH/App.xcodeproj" ]; then
+      APP_NAME="App"
+    else
+      APP_NAME=$(ls "$IOS_PATH" | grep ".xcodeproj" | sed 's/.xcodeproj//' | head -n 1 || true)
+      if [ -z "$APP_NAME" ]; then
+        echo "No Xcode project found in platforms/ios directory."
+        exit 1
+      fi
+    fi
+
+    echo "Detected APP_NAME: $APP_NAME"
     echo "##vso[task.setvariable variable=APP_NAME]$APP_NAME"
   displayName: 'Detect App Name'
 
-# 3) Extract BUNDLE_ID from Cordova config.xml
+# 4) Extract BUNDLE_ID from Cordova config.xml
 - script: |
+    set -e
     CONFIG_XML_PATH="config.xml"
     if [ -f "$CONFIG_XML_PATH" ]; then
       BUNDLE_ID=$(grep -oE 'id="[^"]+"' "$CONFIG_XML_PATH" | cut -d'"' -f2)
@@ -73,7 +85,15 @@ steps:
     echo "##vso[task.setvariable variable=BUNDLE_ID]$BUNDLE_ID"
   displayName: 'Extract Bundle ID from Cordova Config'
 
-# 4) Install provisioning profile and extract UUID
+# 5) Install provisioning profile via Azure Secure Files (optional but recommended)
+#    If you want to keep the manual install instead, you can skip this task and rely on step 6 below.
+- task: InstallAppleProvisioningProfile@1
+  displayName: 'Install Apple Provisioning Profile'
+  inputs:
+    provProfileSecureFile: 'AppSealing_Wildcard_Distribution.mobileprovision'  # Secure Files name
+    removeProfile: false
+
+# 6) (Optional) Manual install + detailed logging (kept as a fallback / debugging aid)
 - script: |
     set -euxo pipefail
 
@@ -81,18 +101,33 @@ steps:
     PP_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
     mkdir -p "$PP_DIR"
 
+    echo ">>> Dumping provisioning profile to plist..."
     TMP_PLIST="$(mktemp)"
     security cms -D -i "$PROVISIONING_PROFILE_PATH" > "$TMP_PLIST"
-    PP_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$TMP_PLIST")
 
-    echo "Provisioning Profile UUID: $PP_UUID"
-    cp "$PROVISIONING_PROFILE_PATH" "$PP_DIR/$PP_UUID.mobileprovision"
+    PP_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$TMP_PLIST")
+    PP_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$TMP_PLIST" || echo "UNKNOWN_NAME")
+    TEAM_ID_PLIST=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$TMP_PLIST" || echo "UNKNOWN_TEAM")
+    APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$TMP_PLIST" || echo "UNKNOWN_APP_ID")
+
+    echo ">>> PROFILE INFO"
+    echo "UUID         : $PP_UUID"
+    echo "Name         : $PP_NAME"
+    echo "Team ID(plist): $TEAM_ID_PLIST"
+    echo "App ID       : $APP_ID"
+    echo "Target path  : $PP_DIR/$PP_UUID.mobileprovision"
+
+    cp "$PROVISIONING_PROFILE_PATH" "$PP_DIR/$PP_UUID.mobileprovision" || true
+
+    echo ">>> Files in $PP_DIR"
+    ls -al "$PP_DIR"
 
     echo "##vso[task.setvariable variable=PROFILE_UUID]$PP_UUID"
-  displayName: 'Install Provisioning Profile'
+  displayName: 'Install Provisioning Profile (Manual Fallback)'
 
-# 5) Generate ExportOptions.plist (XML)
+# 7) Generate ExportOptions.plist (used only at export stage for provisioningProfiles mapping)
 - script: |
+    set -e
     EXPORT_DIR="$(Build.ArtifactStagingDirectory)"
     mkdir -p "$EXPORT_DIR"
 
@@ -104,7 +139,7 @@ steps:
         <key>method</key>
         <string>app-store-connect</string>
         <key>signingStyle</key>
-        <string>manual</string>
+        <string>automatic</string>
         <key>teamID</key>
         <string>$(TEAM_ID)</string>
         <key>provisioningProfiles</key>
@@ -117,62 +152,136 @@ steps:
     EOF
 
     echo "ExportOptions.plist created at $EXPORT_DIR/ExportOptions.plist"
+    cat "$EXPORT_DIR/ExportOptions.plist"
   displayName: 'Generate ExportOptions.plist'
   env:
     TEAM_ID: $(TEAM_ID)
     PROVISIONING_PROFILE_NAME: $(PROVISIONING_PROFILE_NAME)
 
-# 6) Archive iOS app
+# 8) Archive iOS app (Automatic signing, robust target/scheme detection with App fallback)
 - script: |
+    set -euxo pipefail
+
     EXPORT_DIR="$(Build.ArtifactStagingDirectory)"
     ARCHIVE_PATH="$EXPORT_DIR/${APP_NAME}.xcarchive"
 
-    cd platforms/ios
+    IOS_DIR="$(Build.SourcesDirectory)/platforms/ios"
+    cd "$IOS_DIR"
 
-    xcodebuild clean archive \
-      -workspace "${APP_NAME}.xcworkspace" \
-      -scheme "${APP_NAME}" \
-      -sdk iphoneos \
-      -configuration Release \
-      CODE_SIGN_IDENTITY="Apple Distribution" \
-      CODE_SIGN_STYLE="Manual" \
-      DEVELOPMENT_TEAM="$(TEAM_ID)" \
-      PROVISIONING_PROFILE_SPECIFIER="$(PROFILE_UUID)" \
-      SWIFT_OBJC_BRIDGING_HEADER="Azure_RN078-Bridging-Header.h" \
-      -archivePath "$ARCHIVE_PATH"
+    echo ">>> ARCHIVE SETTINGS"
+    echo "APP_NAME                   : $APP_NAME"
+    echo "TEAM_ID                    : $(TEAM_ID)"
+    echo "BUNDLE_ID                  : $(BUNDLE_ID)"
+    echo "PROVISIONING_PROFILE_NAME  : $(PROVISIONING_PROFILE_NAME)"
+    echo "PROFILE_UUID               : $(PROFILE_UUID)"
+    echo "Provisioning dir listing:"
+    ls -al "$HOME/Library/MobileDevice/Provisioning Profiles" || true
+
+    # 1) Try workspace/scheme == APP_NAME (.xcworkspace)
+    SCHEME_CANDIDATE="$APP_NAME"
+    WORKSPACE_CANDIDATE="$APP_NAME.xcworkspace"
+    PROJECT_CANDIDATE="$APP_NAME.xcodeproj"
+
+    USE_WORKSPACE=false
+
+    if [ -f "$WORKSPACE_CANDIDATE" ]; then
+      USE_WORKSPACE=true
+    elif [ -f "$PROJECT_CANDIDATE" ]; then
+      USE_WORKSPACE=false
+    else
+      # 2) Try to detect workspace and scheme automatically
+      WS=$(ls *.xcworkspace 2>/dev/null | head -n 1 || true)
+      if [ -n "$WS" ]; then
+        WORKSPACE_CANDIDATE="$WS"
+        USE_WORKSPACE=true
+        # Derive scheme name from workspace name without extension
+        SCHEME_CANDIDATE="${WS%.xcworkspace}"
+      else
+        # 3) Fallback: force App.xcworkspace / App scheme
+        WORKSPACE_CANDIDATE="App.xcworkspace"
+        SCHEME_CANDIDATE="App"
+        USE_WORKSPACE=true
+      fi
+    fi
+
+    echo ">>> RESOLVED BUILD TARGET"
+    echo "USE_WORKSPACE      : $USE_WORKSPACE"
+    echo "WORKSPACE_CANDIDATE: $WORKSPACE_CANDIDATE"
+    echo "PROJECT_CANDIDATE  : $PROJECT_CANDIDATE"
+    echo "SCHEME_CANDIDATE   : $SCHEME_CANDIDATE"
+
+    # Ensure deployment target >= 12.0 (Cordova templates often use 11.0)
+    INFO_PLIST_PATH="$IOS_DIR/$APP_NAME/$APP_NAME-Info.plist"
+    if [ -f "$INFO_PLIST_PATH" ]; then
+      echo ">>> Bumping IPHONEOS_DEPLOYMENT_TARGET to 12.0 in $INFO_PLIST_PATH (if exists)"
+      /usr/libexec/PlistBuddy -c "Set :IPHONEOS_DEPLOYMENT_TARGET 12.0" "$INFO_PLIST_PATH" || true
+    fi
+
+    echo ">>> Starting Xcode archive with Automatic signing..."
+    if [ "$USE_WORKSPACE" = true ]; then
+      xcodebuild clean archive \
+        -workspace "$WORKSPACE_CANDIDATE" \
+        -scheme "$SCHEME_CANDIDATE" \
+        -sdk iphoneos \
+        -configuration Release \
+        CODE_SIGN_STYLE=Automatic \
+        DEVELOPMENT_TEAM="$(TEAM_ID)" \
+        -archivePath "$ARCHIVE_PATH"
+    else
+      xcodebuild clean archive \
+        -project "$PROJECT_CANDIDATE" \
+        -scheme "$SCHEME_CANDIDATE" \
+        -sdk iphoneos \
+        -configuration Release \
+        CODE_SIGN_STYLE=Automatic \
+        DEVELOPMENT_TEAM="$(TEAM_ID)" \
+        -archivePath "$ARCHIVE_PATH"
+    fi
+
+    echo "Archive completed: $ARCHIVE_PATH"
   displayName: 'Archive iOS App'
   env:
     TEAM_ID: $(TEAM_ID)
     PROVISIONING_PROFILE_NAME: $(PROVISIONING_PROFILE_NAME)
 
-# 7) Export IPA
+# 9) Export IPA using ExportOptions.plist
 - script: |
+    set -e
     EXPORT_DIR="$(Build.ArtifactStagingDirectory)"
     ARCHIVE_PATH="$EXPORT_DIR/${APP_NAME}.xcarchive"
 
+    echo ">>> Exporting IPA..."
     xcodebuild -exportArchive \
       -archivePath "$ARCHIVE_PATH" \
       -exportOptionsPlist "$EXPORT_DIR/ExportOptions.plist" \
       -exportPath "$EXPORT_DIR"
+
+    echo "IPA export finished. Files:"
+    ls -al "$EXPORT_DIR"
   displayName: 'Export IPA'
 
-# 8) Run generate_hash on IPA
+# 10) Run generate_hash on IPA
 - script: |
+    set -e
     HASH_SCRIPT_PATH="$(Build.SourcesDirectory)/platforms/ios/AppSealingSDK/Tools/generate_hash"
     IPA_PATH=$(find "$(Build.ArtifactStagingDirectory)" -type f -name "*.ipa" | head -n 1)
+
+    echo ">>> IPA for hashing: $IPA_PATH"
 
     chmod +x "$HASH_SCRIPT_PATH"
     "$HASH_SCRIPT_PATH" "$IPA_PATH"
   displayName: 'Run generate_hash on IPA'
 
-# 9) Upload to TestFlight
+# 11) Upload IPA to TestFlight
 - script: |
+    set -e
     IPA_PATH=$(find "$(Build.ArtifactStagingDirectory)" -type f -name "*.ipa" | head -n 1)
     if [ ! -f "$IPA_PATH" ]; then
       echo "IPA file not found. Skipping upload."
       exit 1
     fi
 
+    echo ">>> Uploading IPA to TestFlight: $IPA_PATH"
     xcrun altool --upload-app \
       -f "$IPA_PATH" \
       -t ios \
@@ -183,7 +292,7 @@ steps:
     APPLE_ID: $(APPLE_ID)
     APP_SPECIFIC_PASSWORD: $(APP_SPECIFIC_PASSWORD)
 
-# 10) Cleanup temporary keychain
+# 12) Cleanup temporary keychain
 - script: |
     TEMP_KEYCHAIN_PATH="$HOME/Library/Keychains/temp-keychain.keychain-db"
     if [ -f "$TEMP_KEYCHAIN_PATH" ]; then
