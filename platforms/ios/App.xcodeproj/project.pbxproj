@@ -431,7 +431,6 @@
 				CODE_SIGN_ENTITLEMENTS = "$(TARGET_NAME)/Entitlements-$(CONFIGURATION).plist";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 22X77ENQ2H;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -450,7 +449,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/AppSealingSDK/Libraries",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 12.0.6;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -478,7 +477,6 @@
 				CODE_SIGN_ENTITLEMENTS = "$(TARGET_NAME)/Entitlements-$(CONFIGURATION).plist";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 1.0.0;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 22X77ENQ2H;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -497,7 +495,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/AppSealingSDK/Libraries",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 12.0.6;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
